@@ -1,6 +1,5 @@
 import win32com.client as win32
 import os
-import gc
 from PyPDF2 import PdfMerger
 
 # Функция для чтения путей и диапазона из текстового файла
@@ -37,34 +36,32 @@ def read_paths_and_range_from_file(txt_file_path):
         return None, None
 
 def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
-    from win32com.client import Dispatch
-    import gc
-
-    excel_app = Dispatch('Excel.Application')
+    excel_app = win32.gencache.EnsureDispatch('Excel.Application')
     excel_app.Visible = False
 
-    workbook = None
     try:
         workbook = excel_app.Workbooks.Open(excel_file_path)
         sheets = workbook.Sheets
-
-        # Получаем видимые листы
-        visible_sheets = get_visible_sheets(sheets)
+        visible_sheets = [sheet for sheet in sheets if sheet.Visible == -1]
 
         if len(visible_sheets) < 2:
             print(f"Недостаточно видимых листов для экспорта в файле {excel_file_path}.")
             return
 
-        # Экспортируем только первые два видимых листа
-        first_sheet = visible_sheets[0]
-        first_sheet.PageSetup.PrintArea = "$A$1:$P$100"
+        sheets_to_export = visible_sheets[:2]
+        for sheet in sheets:
+            if sheet not in sheets_to_export:
+                sheet.Visible = False
 
-        second_sheet = visible_sheets[1]
+        first_sheet = sheets_to_export[0]
+        first_sheet.PageSetup.PrintArea = "$A$1:$Q$200"
+
+        second_sheet = sheets_to_export[1]
         if second_sheet.PageSetup.PrintArea == "":
             second_sheet.PageSetup.PrintArea = second_sheet.UsedRange.Address
 
         workbook.ExportAsFixedFormat(
-            Type=0,  # PDF
+            Type=0,
             Filename=output_pdf_path,
             Quality=0,
             IncludeDocProperties=True,
@@ -76,12 +73,10 @@ def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
     except Exception as e:
         print(f"Произошла ошибка с файлом {excel_file_path}: {e}")
     finally:
-        if workbook:
-            workbook.Close(SaveChanges=False)
-        if excel_app:
-            excel_app.Quit()
-        del excel_app
-        gc.collect()
+        for sheet in sheets:
+            sheet.Visible = True
+        workbook.Close(SaveChanges=False)
+        excel_app.Quit()
 
 def process_folder_recursive(folder_path, output_folder, number_range):
     os.makedirs(output_folder, exist_ok=True)
