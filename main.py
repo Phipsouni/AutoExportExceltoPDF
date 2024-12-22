@@ -37,41 +37,34 @@ def read_paths_and_range_from_file(txt_file_path):
         return None, None
 
 def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
-    excel_app = win32.gencache.EnsureDispatch('Excel.Application')
+    from win32com.client import Dispatch
+    import gc
+
+    excel_app = Dispatch('Excel.Application')
     excel_app.Visible = False
 
+    workbook = None
     try:
         workbook = excel_app.Workbooks.Open(excel_file_path)
         sheets = workbook.Sheets
 
-        # Фильтруем видимые листы через индексацию
-        visible_sheets = []
-        for i in range(1, sheets.Count + 1):
-            sheet = sheets.Item(i)
-            if sheet.Visible == -1:  # -1 соответствует "видимому"
-                visible_sheets.append(sheet)
+        # Получаем видимые листы
+        visible_sheets = get_visible_sheets(sheets)
 
         if len(visible_sheets) < 2:
             print(f"Недостаточно видимых листов для экспорта в файле {excel_file_path}.")
             return
 
-        sheets_to_export = visible_sheets[:2]
-        for sheet in sheets:
-            try:
-                if sheet not in sheets_to_export:
-                    sheet.Visible = False
-            except Exception as e:
-                print(f"Не удалось изменить видимость листа {sheet.Name}: {e}")
-
-        first_sheet = sheets_to_export[0]
+        # Экспортируем только первые два видимых листа
+        first_sheet = visible_sheets[0]
         first_sheet.PageSetup.PrintArea = "$A$1:$P$100"
 
-        second_sheet = sheets_to_export[1]
+        second_sheet = visible_sheets[1]
         if second_sheet.PageSetup.PrintArea == "":
             second_sheet.PageSetup.PrintArea = second_sheet.UsedRange.Address
 
         workbook.ExportAsFixedFormat(
-            Type=0,
+            Type=0,  # PDF
             Filename=output_pdf_path,
             Quality=0,
             IncludeDocProperties=True,
@@ -83,13 +76,10 @@ def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
     except Exception as e:
         print(f"Произошла ошибка с файлом {excel_file_path}: {e}")
     finally:
-        for sheet in sheets:
-            try:
-                sheet.Visible = True
-            except Exception:
-                pass
-        workbook.Close(SaveChanges=False)
-        excel_app.Quit()
+        if workbook:
+            workbook.Close(SaveChanges=False)
+        if excel_app:
+            excel_app.Quit()
         del excel_app
         gc.collect()
 
@@ -170,5 +160,4 @@ if __name__ == "__main__":
         folder_path, output_folder, final_pdf_folder = paths
         os.makedirs(final_pdf_folder, exist_ok=True)
         pdf_files = process_folder_recursive(folder_path, output_folder, number_range)
-        merge_pdfs(pdf_files, final_pdf_folder)(folder_path, output_folder, number_range)
         merge_pdfs(pdf_files, final_pdf_folder)
