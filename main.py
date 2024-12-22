@@ -54,7 +54,7 @@ def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
                 sheet.Visible = False
 
         first_sheet = sheets_to_export[0]
-        first_sheet.PageSetup.PrintArea = "$A$1:$Q$200"
+        first_sheet.PageSetup.PrintArea = "$A$1:$P$100"
 
         second_sheet = sheets_to_export[1]
         if second_sheet.PageSetup.PrintArea == "":
