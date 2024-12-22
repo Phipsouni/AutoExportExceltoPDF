@@ -1,5 +1,6 @@
 import win32com.client as win32
 import os
+import gc
 from PyPDF2 import PdfMerger
 
 # Функция для чтения путей и диапазона из текстового файла
@@ -42,7 +43,13 @@ def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
     try:
         workbook = excel_app.Workbooks.Open(excel_file_path)
         sheets = workbook.Sheets
-        visible_sheets = [sheet for sheet in sheets if sheet.Visible == -1]
+
+        # Фильтруем видимые листы через индексацию
+        visible_sheets = []
+        for i in range(1, sheets.Count + 1):
+            sheet = sheets.Item(i)
+            if sheet.Visible == -1:  # -1 соответствует "видимому"
+                visible_sheets.append(sheet)
 
         if len(visible_sheets) < 2:
             print(f"Недостаточно видимых листов для экспорта в файле {excel_file_path}.")
@@ -50,11 +57,14 @@ def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
 
         sheets_to_export = visible_sheets[:2]
         for sheet in sheets:
-            if sheet not in sheets_to_export:
-                sheet.Visible = False
+            try:
+                if sheet not in sheets_to_export:
+                    sheet.Visible = False
+            except Exception as e:
+                print(f"Не удалось изменить видимость листа {sheet.Name}: {e}")
 
         first_sheet = sheets_to_export[0]
-        first_sheet.PageSetup.PrintArea = "$A$1:$Q$100"
+        first_sheet.PageSetup.PrintArea = "$A$1:$P$100"
 
         second_sheet = sheets_to_export[1]
         if second_sheet.PageSetup.PrintArea == "":
@@ -74,9 +84,14 @@ def export_first_two_visible_sheets_to_pdf(excel_file_path, output_pdf_path):
         print(f"Произошла ошибка с файлом {excel_file_path}: {e}")
     finally:
         for sheet in sheets:
-            sheet.Visible = True
+            try:
+                sheet.Visible = True
+            except Exception:
+                pass
         workbook.Close(SaveChanges=False)
         excel_app.Quit()
+        del excel_app
+        gc.collect()
 
 def process_folder_recursive(folder_path, output_folder, number_range):
     os.makedirs(output_folder, exist_ok=True)
@@ -155,4 +170,5 @@ if __name__ == "__main__":
         folder_path, output_folder, final_pdf_folder = paths
         os.makedirs(final_pdf_folder, exist_ok=True)
         pdf_files = process_folder_recursive(folder_path, output_folder, number_range)
+        merge_pdfs(pdf_files, final_pdf_folder)(folder_path, output_folder, number_range)
         merge_pdfs(pdf_files, final_pdf_folder)
